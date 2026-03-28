@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>PATS v6 - ADHD 대화 분석 도우미</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    :root{--bg:#0d0f1a;--sf:#161824;--sf2:#1e2130;--bd:#2a2d3e;--green:#00d9a3;--amber:#f5a623;--red:#e94560;--muted:#6b7399;--text:#dde1f5;--text2:#9aa0c0;--acc:#e94560}
+    html{height:100%;overflow:hidden}
+    body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-serif;display:flex;justify-content:center}
+    .app{max-width:460px;width:100%;padding:16px 16px 12px;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+    .header{text-align:center;padding:8px 0;flex:0 0 auto}
+    .logo{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:4px;color:var(--muted);text-transform:uppercase;margin-bottom:3px}
+    .title{font-size:20px;font-weight:700;color:#e6f1ff;text-shadow:0 0 10px rgba(255,255,255,0.1)}
+    .mic-wrap{text-align:center;padding:10px 0;flex:0 0 auto}
+    .mic-btn{width:64px;height:64px;border-radius:50%;border:none;cursor:pointer;background:#1e2d4a;display:inline-flex;align-items:center;justify-content:center;transition:0.3s}
+    .mic-btn.active{background:var(--acc);box-shadow:0 0 20px var(--acc);animation:pulse 1.5s infinite}
+    @keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.08)}100%{transform:scale(1)}}
+    .mic-btn svg{width:28px;height:28px;fill:#fff}
+    .mic-lbl{font-size:11px;color:var(--muted);margin-top:6px}
+    .slabel{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
+    .card{background:var(--sf);border:1px solid var(--bd);border-radius:14px;padding:12px 14px;margin-bottom:8px;flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+    .tbox{flex:1;overflow-y:auto;font-size:13px;line-height:1.8;color:var(--text2);margin-top:4px}
+    .interim{color:var(--muted);font-style:italic;font-size:12px;flex:0 0 auto}
+    .info-row{display:flex;gap:8px;margin-bottom:8px;flex:0 0 auto}
+    .info-box{flex:1;background:var(--sf);border:1px solid var(--bd);border-radius:14px;padding:14px;text-align:center}
+    .info-box.topic{flex:2}
+    .info-label{font-size:11px;color:var(--muted);margin-bottom:6px}
+    .info-value{font-size:18px;font-weight:700;color:var(--green)}
+    .info-value.focus{color:#8ac4ff}
+    .gcard{border-radius:14px;padding:12px;border-left:4px solid var(--green);background:rgba(255,255,255,0.03);flex:0 0 auto;margin-bottom:8px;max-height:80px;overflow:hidden}
+    .gbody{font-size:13px;line-height:1.5;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical}
+    .btn-row{display:flex;gap:8px;flex:0 0 auto}
+    .btn{flex:1;background:var(--sf2);border:1px solid var(--bd);border-radius:10px;color:var(--text2);padding:10px;cursor:pointer;font-weight:700;font-size:14px;transition:0.2s}
+    .btn:active{transform:scale(0.97)}
+    .btn-analyze{background:linear-gradient(135deg,#1a3a5c,#1e4a6a);border-color:#2a5a8a;color:#8ac4ff}
+    .btn-analyze:hover{background:linear-gradient(135deg,#1e4a6a,#226a8a)}
+    .btn-analyze:disabled{opacity:0.5;cursor:not-allowed}
+    .sentence-on-topic{color:#00d9a3;margin-bottom:4px}
+    .sentence-off-topic{color:#e94560;margin-bottom:4px}
+    .sentence-pending{color:var(--text2);margin-bottom:4px}
+    .loading-indicator{display:none;align-items:center;justify-content:center;gap:8px;padding:8px;color:var(--amber);font-size:12px}
+    .loading-indicator.show{display:flex}
+    .spinner{width:16px;height:16px;border:2px solid var(--amber);border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="logo">PATS v6 · AI Analysis</div>
+    <div class="title">대화 주제 분석 도우미</div>
+  </div>
+
+  <div class="mic-wrap">
+    <button class="mic-btn" id="micBtn" onclick="toggleRec()">
+      <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V20H9v2h6v-2h-2v-2.07A7 7 0 0 0 19 11h-2z"/></svg>
+    </button>
+    <p class="mic-lbl" id="micLbl">탭하여 녹음 시작</p>
+  </div>
+
+  <div class="info-row">
+    <div class="info-box topic">
+      <div class="info-label">📌 현재 주제</div>
+      <div class="info-value" id="topicVal">분석 버튼을 눌러주세요</div>
+    </div>
+    <div class="info-box">
+      <div class="info-label">🎯 집중도</div>
+      <div class="info-value focus" id="focusNum">—</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="slabel">대화 내용</div>
+    <div class="tbox" id="tbox">대화 내용이 여기에 표시됩니다...</div>
+    <div class="interim" id="interim"></div>
+  </div>
+
+  <div class="loading-indicator" id="loadingBar">
+    <div class="spinner"></div>
+    <span>AI가 주제를 분석 중입니다...</span>
+  </div>
+
+  <div class="gcard" id="gcard">
+    <div class="slabel" id="gtitle">AI 상태</div>
+    <div class="gbody" id="gbody">준비 중...</div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-analyze" id="analyzeBtn" onclick="onAnalyzeClick()" disabled>📊 분석</button>
+    <button class="btn" onclick="location.reload()">새로고침</button>
+  </div>
+</div>
+
+<script>
+var apiKey = 'AIzaSyD2f633tIbnujS2WONE2VV32E_aBbdDEfg';
+var models = [
+  {name: 'gemini-2.0-flash-lite', ver: 'v1beta'},
+  {name: 'gemini-2.5-flash-lite', ver: 'v1beta'},
+  {name: 'gemini-2.0-flash', ver: 'v1beta'},
+  {name: 'gemini-2.5-flash', ver: 'v1beta'}
+];
+var currentModel = 0;
+
+var rec = null, isRec = false, fullText = '', topic = '';
+var busy = false, apiReady = false;
+var sentences = [];
+var unanalyzedStart = 0;
+
+var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+window.addEventListener('load', function() {
+  tryConnectAPI(0);
+});
+
+async function tryConnectAPI(modelIdx) {
+  if (modelIdx >= models.length) {
+    setGuideText('❌ 모든 모델 할당량 초과', '다른 API 키가 필요합니다.');
+    return;
+  }
+  currentModel = modelIdx;
+  setGuideText('연결 테스트 중...', models[modelIdx].name + ' 시도 중');
+
+  try {
+    var url = 'https://generativelanguage.googleapis.com/' + models[modelIdx].ver + '/models/' + models[modelIdx].name + ':generateContent?key=' + apiKey;
+    var res = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({contents: [{parts: [{text: '테스트. JSON만: {"ok":true}'}]}], generationConfig: {temperature: 0}})
+    });
+
+    if (res.ok) {
+      setGuideText('✅ AI 연결 완료 (' + models[modelIdx].name + ')', '마이크를 켜고 대화 후 분석 버튼을 누르세요!');
+      apiReady = true;
+    } else if (res.status === 429) {
+      tryConnectAPI(modelIdx + 1);
+    } else {
+      var err = await res.json().catch(function() { return {}; });
+      setGuideText('❌ API 오류 (' + res.status + ')', (err && err.error ? err.error.message : '').substring(0, 80));
+    }
+  } catch(e) {
+    setGuideText('❌ 네트워크 오류', '인터넷 연결을 확인하세요.');
+  }
+}
+
+function toggleRec() { if (isRec) stopRec(); else startRec(); }
+
+function startRec() {
+  if (!SR) return alert('크롬 브라우저를 사용해주세요!');
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+      stream.getTracks().forEach(function(track) { track.stop(); });
+      initSpeechRecognition();
+    }).catch(function(err) {
+      document.getElementById('micLbl').textContent = '❌ 마이크 권한 거부';
+      setGuideText('마이크 권한 필요', '주소창 🔒 → 마이크 허용 → 새로고침');
+    });
+  } else {
+    initSpeechRecognition();
+  }
+}
+
+function initSpeechRecognition() {
+  rec = new SR();
+  rec.lang = 'ko-KR';
+  rec.continuous = true;
+  rec.interimResults = true;
+
+  rec.onstart = function() {
+    isRec = true;
+    document.getElementById('micBtn').classList.add('active');
+    document.getElementById('micLbl').textContent = '🎙️ 녹음 중... (말한 후 분석 버튼)';
+    updateAnalyzeBtn();
+  };
+
+  rec.onerror = function(e) {
+    if (e.error === 'not-allowed') {
+      document.getElementById('micLbl').textContent = '❌ 마이크 권한 거부';
+      setGuideText('마이크 권한 필요', '주소창 🔒 → 마이크 허용 → 새로고침');
+      isRec = false;
+      document.getElementById('micBtn').classList.remove('active');
+    } else if (e.error === 'no-speech') {
+      // 무시
+    } else if (e.error === 'network') {
+      document.getElementById('micLbl').textContent = '❌ 네트워크 오류';
+      isRec = false;
+      document.getElementById('micBtn').classList.remove('active');
+    } else if (e.error === 'audio-capture') {
+      document.getElementById('micLbl').textContent = '❌ 마이크를 찾을 수 없습니다';
+      isRec = false;
+      document.getElementById('micBtn').classList.remove('active');
+    } else if (e.error !== 'aborted') {
+      document.getElementById('micLbl').textContent = '오류: ' + e.error;
+    }
+  };
+
+  rec.onresult = function(e) {
+    var inter = '';
+    for (var i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        var text = e.results[i][0].transcript.trim();
+        if (text) {
+          sentences.push({ text: text, status: 'pending' });
+          fullText += text + ' ';
+          renderSentences();
+        }
+      } else {
+        inter += e.results[i][0].transcript;
+      }
+    }
+    document.getElementById('interim').textContent = inter;
+    updateAnalyzeBtn();
+  };
+
+  rec.onend = function() {
+    if (isRec) {
+      setTimeout(function() {
+        if (isRec) try { rec.start(); } catch(e) {}
+      }, 300);
+    }
+  };
+
+  try {
+    rec.start();
+    document.getElementById('micLbl').textContent = '마이크 연결 중...';
+  } catch (e) {
+    document.getElementById('micLbl').textContent = '❌ 마이크 시작 실패';
+  }
+}
+
+function stopRec() {
+  isRec = false;
+  if (rec) rec.stop();
+  document.getElementById('micBtn').classList.remove('active');
+  document.getElementById('micLbl').textContent = '녹음 중지됨';
+}
+
+function renderSentences() {
+  var tbox = document.getElementById('tbox');
+  tbox.innerHTML = '';
+  for (var i = 0; i < sentences.length; i++) {
+    var div = document.createElement('div');
+    var s = sentences[i];
+    if (s.status === 'on-topic') {
+      div.className = 'sentence-on-topic';
+      div.textContent = '✅ ' + s.text;
+    } else if (s.status === 'off-topic') {
+      div.className = 'sentence-off-topic';
+      div.textContent = '❌ ' + s.text;
+    } else {
+      div.className = 'sentence-pending';
+      div.textContent = s.text;
+    }
+    tbox.appendChild(div);
+  }
+  tbox.scrollTop = tbox.scrollHeight;
+}
+
+function updateAnalyzeBtn() {
+  var btn = document.getElementById('analyzeBtn');
+  var hasUnanalyzed = unanalyzedStart < sentences.length;
+  btn.disabled = !hasUnanalyzed || busy;
+}
+
+function onAnalyzeClick() {
+  if (busy) {
+    setGuideText('⏳ 잠시 뒤에 다시 해주세요', 'AI가 아직 분석을 처리 중입니다.');
+    return;
+  }
+  if (unanalyzedStart >= sentences.length) {
+    setGuideText('📝 분석할 내용 없음', '마이크를 켜고 대화를 먼저 진행하세요.');
+    return;
+  }
+  runAnalysis();
+}
+
+async function runAnalysis() {
+  if (busy) return;
+  busy = true;
+
+  var loadingBar = document.getElementById('loadingBar');
+  loadingBar.classList.add('show');
+  document.getElementById('analyzeBtn').disabled = true;
+  setGuideText('🔄 분석 중...', 'AI가 주제를 분석하고 있습니다.');
+
+  var toAnalyze = [];
+  for (var i = unanalyzedStart; i < sentences.length; i++) {
+    toAnalyze.push(sentences[i].text);
+  }
+  var chunk = toAnalyze.join(' ');
+  var analyzeFrom = unanalyzedStart;
+  var analyzeTo = sentences.length;
+
+  var m = models[currentModel] || models[0];
+  var url = 'https://generativelanguage.googleapis.com/' + m.ver + '/models/' + m.name + ':generateContent?key=' + apiKey;
+
+  var sentenceList = toAnalyze.map(function(s, idx) { return (idx+1) + '. ' + s; }).join('\n');
+  var prompt = '너는 대화 주제 분석 도구야. 아래 대화를 읽고 주제를 파악한 뒤, 각 문장이 그 주제에 맞는지 판단해. 순수 JSON으로만 답해. 마크다운 없이 JSON만.\n\n문장 목록:\n' + sentenceList + '\n\n직전주제: ' + (topic || '없음') + '\n\n형식:\n{\n  "topic": "대화의 주제 (간결하게)",\n  "focus": 0에서 100 사이 집중도 점수,\n  "sentences": [\n    {"index": 1, "relevant": true},\n    {"index": 2, "relevant": false}\n  ]\n}\n\nfocus는 전체 대화가 주제에 얼마나 집중하고 있는지 0~100 점수.\nrelevant는 해당 문장이 주제에 맞으면 true, 주제에서 벗어나면 false.';
+
+  try {
+    var res = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({contents: [{parts: [{text: prompt}]}], generationConfig: {temperature: 0.1}})
+    });
+
+    if (!res.ok) {
+      if (res.status === 429) {
+        for (var j = 0; j < models.length; j++) {
+          if (j !== currentModel) {
+            currentModel = j;
+            setGuideText('⏳ 잠시 뒤에 다시 해주세요', '모델 할당량 초과. 모델 변경 (' + models[j].name + ')');
+            break;
+          }
+        }
+      } else {
+        setGuideText('⏳ 잠시 뒤에 다시 해주세요', 'API 오류 (' + res.status + '). 잠시 후 다시 눌러주세요.');
+      }
+      loadingBar.classList.remove('show');
+      busy = false;
+      updateAnalyzeBtn();
+      return;
+    }
+
+    var data = await res.json();
+
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content || !data.candidates[0].content.parts) {
+      setGuideText('⏳ 잠시 뒤에 다시 해주세요', 'AI 응답 오류. 다시 눌러주세요.');
+      loadingBar.classList.remove('show');
+      busy = false;
+      updateAnalyzeBtn();
+      return;
+    }
+
+    var raw = data.candidates[0].content.parts[0].text.trim();
+    var cleaned = raw.replace(/```json\s?|```/g, '').trim();
+
+    var result;
+    try {
+      result = JSON.parse(cleaned);
+    } catch (pe) {
+      var tm = cleaned.match(/"topic"\s*:\s*"([^"]+)"/);
+      if (tm) {
+        result = { topic: tm[1], sentences: [] };
+      } else {
+        setGuideText('⏳ 잠시 뒤에 다시 해주세요', '파싱 오류. 다시 눌러주세요.');
+        loadingBar.classList.remove('show');
+        busy = false;
+        updateAnalyzeBtn();
+        return;
+      }
+    }
+
+    // 주제 표시
+    topic = result.topic || '알 수 없음';
+    document.getElementById('topicVal').textContent = topic;
+
+    // 집중도 표시
+    var focus = (typeof result.focus === 'number' && result.focus >= 0 && result.focus <= 100) ? result.focus : 50;
+    document.getElementById('focusNum').textContent = focus + '%';
+
+    // 각 문장에 주제 적합성 적용 (초록/빨강)
+    if (result.sentences && result.sentences.length > 0) {
+      for (var k = 0; k < result.sentences.length; k++) {
+        var sIdx = analyzeFrom + k;
+        if (sIdx < analyzeTo && sIdx < sentences.length) {
+          sentences[sIdx].status = result.sentences[k].relevant ? 'on-topic' : 'off-topic';
+        }
+      }
+    }
+
+    unanalyzedStart = analyzeTo;
+    renderSentences();
+    setGuideText('✅ 분석 완료', '주제: ' + topic);
+
+  } catch (e) {
+    setGuideText('⏳ 잠시 뒤에 다시 해주세요', '네트워크 오류. 잠시 후 다시 눌러주세요.');
+  } finally {
+    loadingBar.classList.remove('show');
+    busy = false;
+    updateAnalyzeBtn();
+  }
+}
+
+function setGuideText(t, b) {
+  document.getElementById('gtitle').textContent = t;
+  document.getElementById('gbody').textContent = b;
+}
+</script>
+</body>
+</html>
